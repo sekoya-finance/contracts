@@ -7,8 +7,8 @@ import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
-/// @notice Sustainable DCA vault using bentobox and trident
-contract DCA is Clone {
+/// @notice Sustainable and gas efficient DCA vault
+contract Vault is Clone {
     /// -----------------------------------------------------------------------
     /// Errors
     /// -----------------------------------------------------------------------
@@ -119,8 +119,7 @@ contract DCA is Clone {
                 1e24;
         }
 
-        //execute the swap on trident by default but since we don't check if pools are whitelisted
-        //an intermediate contract could redirect the swap to pools outside of trident.
+        //send tokens to worker contract and call job
         sellToken().transfer(
             worker,
             sellAmount
@@ -128,6 +127,7 @@ contract DCA is Clone {
         worker.call(job);
 
         //transfer minAmount minus 0.5% fee to the owner.
+        //will revert if worker didn't send back minAmount.
         buyToken().transfer(
             owner(),
             minAmount
