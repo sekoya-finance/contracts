@@ -124,7 +124,7 @@ contract Vault is Clone {
             worker,
             sellAmount
         );
-        worker.call(job);
+        worker.call(job); //No need to check as next step will revert if this call reverted.
 
         //transfer minAmount minus 0.5% fee to the owner.
         //will revert if worker didn't send back minAmount.
