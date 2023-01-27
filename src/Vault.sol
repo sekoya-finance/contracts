@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.11;
+pragma solidity ^0.8.17;
 
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
 import {Clone} from "clones-with-immutable-args/Clone.sol";
