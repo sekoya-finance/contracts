@@ -132,6 +132,12 @@ contract Vault is Clone {
             owner(),
             minAmount
         );
+        
+        //transfer 0.5% + remaining to msg.sender
+        buyToken().transfer(
+            msg.sender,
+            buyToken().balanceOf(address(this))
+        );
 
         emit ExecuteDCA(minAmount);
     }
