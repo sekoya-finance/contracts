@@ -34,14 +34,21 @@ contract VaultTest is Test {
 
     function deployDaiToWethVault(uint64 epochDuration, uint256 amount) public returns (Vault dca) {
         return factory.createDCA(
-            msg.sender, address(dai), address(weth), address(daiOracle), address(wethOracle), epochDuration, 0, amount
+            address(this),
+            address(dai),
+            address(weth),
+            address(daiOracle),
+            address(wethOracle),
+            epochDuration,
+            0,
+            amount
         );
     }
 
     function testDeployDAItoWETHVault() public {
         Vault dca = deployDaiToWethVault(1 days, 10 * 1e18);
 
-        assertEq(dca.owner(), msg.sender);
+        assertEq(dca.owner(), address(this));
         assertEq(address(dca.sellToken()), address(dai));
         assertEq(address(dca.buyToken()), address(weth));
         (
@@ -56,5 +63,33 @@ contract VaultTest is Test {
         assertEq(epochDuration, 1 days);
         assertEq(decimalsDiff, 0);
         assertEq(amount, 10 * 1e18);
+    }
+
+    function testExecuteDca() public {
+        uint256 amount = 10 * 1e18;
+        Vault dca = deployDaiToWethVault(1 days, amount);
+        dai.transfer((address(dca)), amount);
+        vm.warp(block.timestamp + 1 days); //Add 1 day time so we can execute the dca
+
+        //determine price & send weth to worker to emulate a swap with just executing a transfer back to the vault
+        uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
+        uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
+        uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
+        uint256 wethAmount = (ratio * amount) / 1e24;
+        weth.transfer(address(dca), wethAmount);
+
+        //save balances
+        uint256 oldOwnerBalance = weth.balanceOf(address(this));
+        uint256 oldExecutorBalance = weth.balanceOf(address(1111)); //use a new address as executor so we can check the 0.5% fees
+
+        //prank & execute
+        vm.prank(address(1111));
+        dca.executeDCA(
+            address(worker), abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(this), wethAmount)))
+        );
+
+        //assert
+        assertEq(weth.balanceOf(address(this)), oldOwnerBalance + (wethAmount * 995 / 1000));
+        assertEq(weth.balanceOf(address(1111)), oldExecutorBalance + (wethAmount * 5 / 1000));
     }
 }
