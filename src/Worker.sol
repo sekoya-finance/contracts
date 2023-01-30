@@ -7,7 +7,6 @@ import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 /// @author HHK-ETH
 /// @notice Very simple swap executor for Dca vaults
 contract Worker {
-
     /// @notice PreApprove a token to execute swaps
     /// @notice /!\ because anyone can preApprove this contract should never be holding tokens.
     /// @param router Address of the dex/aggregator to approve
@@ -23,7 +22,7 @@ contract Worker {
 
         router.call(data);
     }
-    
+
     /// @notice Execute the swap on a given agg/dex and send back tokens in case agg/dex didn't send back token to vault
     /// @param job Calldata to execute on the router & token out to send back to vault
     function executeJobAndSendBack(bytes calldata job) external {
@@ -31,9 +30,6 @@ contract Worker {
 
         router.call(data);
 
-        ERC20(token).transfer(
-            msg.sender,
-            ERC20(token).balanceOf(address(this))
-        );
+        ERC20(token).transfer(msg.sender, ERC20(token).balanceOf(address(this)));
     }
 }

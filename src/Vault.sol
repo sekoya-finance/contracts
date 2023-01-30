@@ -78,7 +78,7 @@ contract Vault is Clone {
     /// Modifier
     /// -----------------------------------------------------------------------
 
-    modifier onlyOwner {
+    modifier onlyOwner() {
         if (msg.sender != owner()) {
             revert OwnerOnly();
         }
@@ -113,31 +113,19 @@ contract Vault is Clone {
         uint256 minAmount;
         unchecked {
             uint256 ratio = (sellTokenPrice * 1e24) / buyTokenPrice;
-            minAmount =
-                (((ratio * sellAmount) * (10**decimalsDiff)) * 995) /
-                1000 /
-                1e24;
+            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * 995) / 1000 / 1e24;
         }
 
         //send tokens to worker contract and call job
-        sellToken().transfer(
-            worker,
-            sellAmount
-        );
+        sellToken().transfer(worker, sellAmount);
         worker.call(job); //No need to check as next step will revert if this call reverted.
 
         //transfer minAmount minus 0.5% fee to the owner.
         //will revert if worker didn't send back minAmount.
-        buyToken().transfer(
-            owner(),
-            minAmount
-        );
-        
+        buyToken().transfer(owner(), minAmount);
+
         //transfer 0.5% + remaining to msg.sender
-        buyToken().transfer(
-            msg.sender,
-            buyToken().balanceOf(address(this))
-        );
+        buyToken().transfer(msg.sender, buyToken().balanceOf(address(this)));
 
         emit ExecuteDCA(minAmount);
     }
@@ -147,7 +135,7 @@ contract Vault is Clone {
         sellToken().transfer(owner(), amount);
         emit Withdraw(amount);
     }
-    
+
     ///@notice Allow the owner to delete the vault
     function turnOff() external onlyOwner {
         sellToken().transfer(owner(), sellToken().balanceOf(address(this)));
