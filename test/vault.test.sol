@@ -32,6 +32,7 @@ contract VaultTest is Test {
         wethOracle.setLatestAnswer(500 * 1e8);
     }
 
+    ///@notice Function to easily deploy a dai to weth vault
     function deployDaiToWethVault(uint64 epochDuration, uint256 amount) public returns (Vault dca) {
         return factory.createDCA(
             address(this),
@@ -46,8 +47,14 @@ contract VaultTest is Test {
     }
 
     function testDeployDAItoWETHVault() public {
-        Vault dca = deployDaiToWethVault(1 days, 10 * 1e18);
+        //setup
+        uint64 time = 1 days;
+        uint256 amount = 10 * 1e18;
 
+        //exec
+        Vault dca = deployDaiToWethVault(time, amount);
+
+        //assert
         assertEq(dca.owner(), address(this));
         assertEq(address(dca.sellToken()), address(dai));
         assertEq(address(dca.buyToken()), address(weth));
@@ -56,16 +63,17 @@ contract VaultTest is Test {
             IAggregatorInterface buyTokenOracle,
             uint64 epochDuration,
             uint8 decimalsDiff,
-            uint256 amount
+            uint256 _amount
         ) = dca.dcaData();
         assertEq(address(sellTokenOracle), address(daiOracle));
         assertEq(address(buyTokenOracle), address(wethOracle));
-        assertEq(epochDuration, 1 days);
+        assertEq(epochDuration, time);
         assertEq(decimalsDiff, 0);
-        assertEq(amount, 10 * 1e18);
+        assertEq(_amount, amount);
     }
 
     function testExecuteDca() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
@@ -83,7 +91,7 @@ contract VaultTest is Test {
         uint256 oldOwnerBalance = weth.balanceOf(address(this));
         uint256 oldExecutorBalance = weth.balanceOf(address(1111)); //use a new address as executor so we can check the 0.5% fees
 
-        //prank & execute
+        //exec
         vm.prank(address(1111));
         dca.executeDCA(
             address(worker), abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(this), wethAmount)))
@@ -95,6 +103,7 @@ contract VaultTest is Test {
     }
 
     function testExecuteDca_fail_tooClose() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
@@ -107,7 +116,7 @@ contract VaultTest is Test {
         uint256 wethAmount = (ratio * amount) / 1e24;
         weth.transfer(address(dca), wethAmount);
 
-        //prank & execute
+        //exec & assert
         vm.prank(address(1111));
         vm.expectRevert(Vault.TooClose.selector); //assert that it will revert with TooClose error
         dca.executeDCA(
@@ -116,13 +125,14 @@ contract VaultTest is Test {
     }
 
     function testExecuteDca_fail_notEnoughTokenReturned() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
         dai.transfer((address(dca)), amount);
         vm.warp(block.timestamp + time); //Add 1 day time so we can execute the dca
 
-        //prank & execute
+        //exec & assert
         vm.prank(address(1111));
         vm.expectRevert(stdError.arithmeticError); //assert that it will revert on arithmeticError
         dca.executeDCA(
@@ -132,6 +142,7 @@ contract VaultTest is Test {
     }
 
     function testWithdraw() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
@@ -140,24 +151,29 @@ contract VaultTest is Test {
         uint256 oldVaultBalance = dai.balanceOf(address(dca));
         uint256 oldOwnerBalance = dai.balanceOf(address(this));
 
+        //exec
         dca.withdraw(amount);
 
+        //assert
         assertEq(dai.balanceOf(address(dca)), oldVaultBalance - amount);
         assertEq(dai.balanceOf(address(this)), oldOwnerBalance + amount);
     }
 
     function testWithdraw_fail_ownerOnly() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
         dai.transfer((address(dca)), amount);
 
+        //exec & assert
         vm.prank(address(8888));
         vm.expectRevert(Vault.OwnerOnly.selector);
         dca.withdraw(amount);
     }
 
     function testTurnOff() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
@@ -166,17 +182,22 @@ contract VaultTest is Test {
         uint256 oldVaultBalance = dai.balanceOf(address(dca));
         uint256 oldOwnerBalance = dai.balanceOf(address(this));
 
+        //exec
         dca.turnOff();
+
+        //assert
         assertEq(dai.balanceOf(address(dca)), 0);
         assertEq(dai.balanceOf(address(this)), oldOwnerBalance + oldVaultBalance);
     }
 
     function testTurnOff_fail_ownerOnly() public {
+        //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
         dai.transfer((address(dca)), amount);
 
+        //exec & assert
         vm.prank(address(8888));
         vm.expectRevert(Vault.OwnerOnly.selector);
         dca.turnOff();
