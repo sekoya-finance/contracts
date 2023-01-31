@@ -136,7 +136,8 @@ contract Vault is Clone {
         emit Withdraw(amount);
     }
 
-    ///@notice Allow the owner to delete the vault
+    ///@notice Allow the owner to withdraw total balance and emit a turnOff event so UI can stop indexing the contract
+    ///@notice Doesn't use selfdestruct in case owner keep sending tokens to this address
     function turnOff() external onlyOwner {
         sellToken().transfer(owner(), sellToken().balanceOf(address(this)));
         emit TurnOff();
