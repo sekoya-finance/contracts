@@ -18,6 +18,8 @@ contract VaultTest is Test {
     PriceAggregator wethOracle;
 
     function setUp() public {
+        //set timestamp to 01/01/2023
+        vm.warp(1672527600);
         //deploy contracts
         vault = new Vault();
         factory = new Factory(vault);
@@ -30,6 +32,9 @@ contract VaultTest is Test {
         daiOracle.setLatestAnswer(1 * 1e8);
         wethOracle = new PriceAggregator(8);
         wethOracle.setLatestAnswer(500 * 1e8);
+
+        //Give a bunch of WETH to worker to execute orders
+        weth.transfer(address(worker), 500 * 1e18);
     }
 
     ///@notice Function to easily deploy a dai to weth vault
@@ -43,6 +48,23 @@ contract VaultTest is Test {
             epochDuration,
             0,
             amount
+        );
+    }
+
+    ///@notice Function to easily execute a dca
+    function executeDaiToWethDca(Vault dca, uint256 amount, address executor) public returns (uint256 wethAmount) {
+        //determine price & send weth to worker to emulate a swap with just executing a transfer back to the vault
+        uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
+        uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
+        uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
+        wethAmount = (ratio * amount) / 1e24;
+
+        vm.prank(executor);
+        dca.executeDCA(
+            address(worker),
+            abi.encodeCall(
+                worker.executeJob, abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(dca), wethAmount)))
+            )
         );
     }
 
@@ -77,25 +99,18 @@ contract VaultTest is Test {
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
-        dai.transfer((address(dca)), amount);
-        vm.warp(block.timestamp + time); //Add 1 day time so we can execute the dca
+        dai.transfer((address(dca)), amount * 2); //send enough dai to execute 2 orders
+        //execute dca once as lastBuy is 0
+        executeDaiToWethDca(dca, amount, address(1111));
 
-        //determine price & send weth to worker to emulate a swap with just executing a transfer back to the vault
-        uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
-        uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
-        uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
-        uint256 wethAmount = (ratio * amount) / 1e24;
-        weth.transfer(address(dca), wethAmount);
+        vm.warp(block.timestamp + time); //Add 1 day time so we can execute the dca
 
         //save balances
         uint256 oldOwnerBalance = weth.balanceOf(address(this));
-        uint256 oldExecutorBalance = weth.balanceOf(address(1111)); //use a new address as executor so we can check the 0.5% fees
+        uint256 oldExecutorBalance = weth.balanceOf(address(1111));
 
         //exec
-        vm.prank(address(1111));
-        dca.executeDCA(
-            address(worker), abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(this), wethAmount)))
-        );
+        uint256 wethAmount = executeDaiToWethDca(dca, amount, address(1111));
 
         //assert
         assertEq(weth.balanceOf(address(this)), oldOwnerBalance + (wethAmount * 995 / 1000));
@@ -107,20 +122,18 @@ contract VaultTest is Test {
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
-        dai.transfer((address(dca)), amount);
-
-        //determine price & send weth to worker to emulate a swap with just executing a transfer back to the vault
-        uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
-        uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
-        uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
-        uint256 wethAmount = (ratio * amount) / 1e24;
-        weth.transfer(address(dca), wethAmount);
+        dai.transfer((address(dca)), amount * 2); //send enough dai to execute 2 orders
+        //execute dca once as lastBuy is 0
+        uint256 wethAmount = executeDaiToWethDca(dca, amount, address(1111));
 
         //exec & assert
         vm.prank(address(1111));
         vm.expectRevert(Vault.TooClose.selector); //assert that it will revert with TooClose error
         dca.executeDCA(
-            address(worker), abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(this), wethAmount)))
+            address(worker),
+            abi.encodeCall(
+                worker.executeJob, abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(dca), wethAmount)))
+            )
         );
     }
 
@@ -129,15 +142,20 @@ contract VaultTest is Test {
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
-        dai.transfer((address(dca)), amount);
+        dai.transfer((address(dca)), amount * 2); //send enough dai to execute 2 orders
+        //execute dca once as lastBuy is 0
+        executeDaiToWethDca(dca, amount, address(1111));
+
         vm.warp(block.timestamp + time); //Add 1 day time so we can execute the dca
 
         //exec & assert
         vm.prank(address(1111));
-        vm.expectRevert(stdError.arithmeticError); //assert that it will revert on arithmeticError
+        vm.expectRevert(stdError.arithmeticError); //assert that it will revert with arithmeticError
         dca.executeDCA(
             address(worker),
-            abi.encode(address(weth), "") //send back 0 weth
+            abi.encodeCall(
+                worker.executeJob, abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(dca), 0)))
+            )
         );
     }
 
