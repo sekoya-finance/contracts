@@ -47,7 +47,6 @@ contract Vault is CloneExtended {
     ///@return _buyTokenPriceFeed Address of the priceFeed
     ///@return _epochDuration Minimum time between each buy
     ///@return _decimalsDiff buyToken decimals - sellToken decimals
-    ///@return _feeRatio Fee for the executor up to 1000 (no fee), 995 -> 0.5% fee
     ///@return _sellAmount Amount of token to sell
     function dcaData()
         public
@@ -57,7 +56,6 @@ contract Vault is CloneExtended {
             IAggregatorInterface _buyTokenPriceFeed,
             uint64 _epochDuration,
             uint8 _decimalsDiff,
-            uint16 _feeRatio,
             uint256 _sellAmount
         )
     {
@@ -66,8 +64,7 @@ contract Vault is CloneExtended {
             IAggregatorInterface(_getArgAddress(80)),
             _getArgUint64(100),
             _getArgUint8(108),
-            _getArgUint16(109),
-            _getArgUint256(111)
+            _getArgUint256(109)
         );
     }
 
@@ -102,7 +99,6 @@ contract Vault is CloneExtended {
             IAggregatorInterface buyTokenPriceFeed,
             uint64 epochDuration,
             uint8 decimalsDiff,
-            uint16 feeRatio,
             uint256 sellAmount
         ) = dcaData();
 
@@ -112,13 +108,13 @@ contract Vault is CloneExtended {
         lastBuy = block.timestamp;
 
         //query oracles and determine minAmount, both priceFeed must have same decimals.
-        uint256 sellTokenPrice = uint256(sellTokenPriceFeed.latestAnswer());
-        uint256 buyTokenPrice = uint256(buyTokenPriceFeed.latestAnswer());
+        uint256 sellTokenPriceUSD = uint256(sellTokenPriceFeed.latestAnswer());
+        uint256 buyTokenPriceUSD = uint256(buyTokenPriceFeed.latestAnswer());
 
         uint256 minAmount;
         unchecked {
-            uint256 ratio = (sellTokenPrice * 1e24) / buyTokenPrice;
-            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * feeRatio) / 1000 / 1e24;
+            uint256 ratio = (sellTokenPriceUSD * 1e24) / buyTokenPriceUSD;
+            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * 995) / 1000 / 1e24;
         }
 
         //send tokens to worker contract and call job
@@ -128,11 +124,11 @@ contract Vault is CloneExtended {
             revert WorkerError(); //This is here only to help bots to save gas on a job/swap error
         }
 
-        //transfer minAmount minus 0.5% fee to the owner.
+        //transfer minAmount minus fee to the owner.
         //will revert if worker didn't send back minAmount.
         buyToken().transfer(owner(), minAmount);
 
-        //transfer 0.5% + remaining to executor/msg.sender
+        //transfer fee + remaining to executor/msg.sender
         buyToken().transfer(msg.sender, buyToken().balanceOf(address(this)));
 
         emit ExecuteDCA(minAmount);

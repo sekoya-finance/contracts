@@ -16,14 +16,13 @@ contract VaultTest is Test {
     Token weth;
     PriceAggregator daiOracle;
     PriceAggregator wethOracle;
-    uint16 feeRatio = 995;
 
     function setUp() public {
         //set timestamp to 01/01/2023
         vm.warp(1672527600);
         //deploy contracts
         vault = new Vault();
-        factory = new Factory(vault, feeRatio);
+        factory = new Factory(vault);
         worker = new Worker();
         dai = new Token("DAI", "DAI", 18, 1000 * 1e18);
         weth = new Token("WETH", "WETH", 18, 1000* 1e18);
@@ -86,14 +85,12 @@ contract VaultTest is Test {
             IAggregatorInterface buyTokenOracle,
             uint64 epochDuration,
             uint8 decimalsDiff,
-            uint16 _feeRatio,
             uint256 _amount
         ) = dca.dcaData();
         assertEq(address(sellTokenOracle), address(daiOracle));
         assertEq(address(buyTokenOracle), address(wethOracle));
         assertEq(epochDuration, time);
         assertEq(decimalsDiff, 0);
-        assertEq(_feeRatio, feeRatio);
         assertEq(_amount, amount);
     }
 
@@ -116,8 +113,8 @@ contract VaultTest is Test {
         uint256 wethAmount = executeDaiToWethDca(dca, amount, address(1111));
 
         //assert
-        assertEq(weth.balanceOf(address(this)), oldOwnerBalance + (wethAmount * feeRatio / 1000));
-        assertEq(weth.balanceOf(address(1111)), oldExecutorBalance + (wethAmount * (1000 - feeRatio) / 1000));
+        assertEq(weth.balanceOf(address(this)), oldOwnerBalance + (wethAmount * 995 / 1000));
+        assertEq(weth.balanceOf(address(1111)), oldExecutorBalance + (wethAmount * (1000 - 995) / 1000));
     }
 
     function testExecuteDca_fail_tooClose() public {
