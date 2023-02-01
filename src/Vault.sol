@@ -2,18 +2,19 @@
 pragma solidity ^0.8.17;
 
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
-import {Clone} from "clones-with-immutable-args/Clone.sol";
+import {CloneExtended} from "./CloneExtended.sol";
 import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
 /// @notice Sustainable and gas efficient DCA vault
-contract Vault is Clone {
+contract Vault is CloneExtended {
     /// -----------------------------------------------------------------------
     /// Errors
     /// -----------------------------------------------------------------------
     error OwnerOnly();
     error TooClose();
+    error WorkerError();
 
     /// -----------------------------------------------------------------------
     /// Events
@@ -46,6 +47,7 @@ contract Vault is Clone {
     ///@return _buyTokenPriceFeed Address of the priceFeed
     ///@return _epochDuration Minimum time between each buy
     ///@return _decimalsDiff buyToken decimals - sellToken decimals
+    ///@return _feeRatio Fee for the executor up to 1000 (no fee), 995 -> 0.5% fee
     ///@return _sellAmount Amount of token to sell
     function dcaData()
         public
@@ -55,6 +57,7 @@ contract Vault is Clone {
             IAggregatorInterface _buyTokenPriceFeed,
             uint64 _epochDuration,
             uint8 _decimalsDiff,
+            uint16 _feeRatio,
             uint256 _sellAmount
         )
     {
@@ -63,7 +66,8 @@ contract Vault is Clone {
             IAggregatorInterface(_getArgAddress(80)),
             _getArgUint64(100),
             _getArgUint8(108),
-            _getArgUint256(109)
+            _getArgUint16(109),
+            _getArgUint256(111)
         );
     }
 
@@ -98,6 +102,7 @@ contract Vault is Clone {
             IAggregatorInterface buyTokenPriceFeed,
             uint64 epochDuration,
             uint8 decimalsDiff,
+            uint16 feeRatio,
             uint256 sellAmount
         ) = dcaData();
 
@@ -113,18 +118,21 @@ contract Vault is Clone {
         uint256 minAmount;
         unchecked {
             uint256 ratio = (sellTokenPrice * 1e24) / buyTokenPrice;
-            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * 995) / 1000 / 1e24;
+            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * feeRatio) / 1000 / 1e24;
         }
 
         //send tokens to worker contract and call job
         sellToken().transfer(worker, sellAmount);
-        worker.call(job); //No need to check as next step will revert if this call reverted.
+        (bool success,) = worker.call(job);
+        if (!success) {
+            revert WorkerError(); //This is here only to help bots to save gas on a job/swap error
+        }
 
         //transfer minAmount minus 0.5% fee to the owner.
         //will revert if worker didn't send back minAmount.
         buyToken().transfer(owner(), minAmount);
 
-        //transfer 0.5% + remaining to msg.sender
+        //transfer 0.5% + remaining to executor/msg.sender
         buyToken().transfer(msg.sender, buyToken().balanceOf(address(this)));
 
         emit ExecuteDCA(minAmount);

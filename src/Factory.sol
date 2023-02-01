@@ -19,9 +19,11 @@ contract Factory {
     /// Immutable variables and constructor
     /// -----------------------------------------------------------------------
     Vault public immutable implementation;
+    uint16 public immutable feeRatio; //max 1000 (no fee), ex: 995 -> 0.5% fee
 
-    constructor(Vault _implementation) {
+    constructor(Vault _implementation, uint16 _feeRatio) {
         implementation = _implementation;
+        feeRatio = _feeRatio;
     }
 
     /// -----------------------------------------------------------------------
@@ -49,7 +51,15 @@ contract Factory {
         uint256 amount
     ) external returns (Vault newVault) {
         bytes memory data = abi.encodePacked(
-            owner, sellToken, buyToken, sellTokenPriceFeed, buyTokenPriceFeed, epochDuration, decimalsDiff, amount
+            owner,
+            sellToken,
+            buyToken,
+            sellTokenPriceFeed,
+            buyTokenPriceFeed,
+            epochDuration,
+            decimalsDiff,
+            feeRatio,
+            amount
         );
         newVault = Vault(address(implementation).clone(data));
         emit CreateDCA(newVault);

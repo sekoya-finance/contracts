@@ -17,18 +17,18 @@ contract Worker {
 
     /// @notice Execute the swap on a given agg/dex
     /// @param job Calldata to execute on the router
-    function executeJob(bytes calldata job) external {
+    function executeJob(bytes calldata job) external returns (bool success) {
         (address router, bytes memory data) = abi.decode(job, (address, bytes));
 
-        router.call(data);
+        (success,) = router.call(data);
     }
 
     /// @notice Execute the swap on a given agg/dex and send back tokens in case agg/dex didn't send back token to vault
     /// @param job Calldata to execute on the router & token out to send back to vault
-    function executeJobAndSendBack(bytes calldata job) external {
+    function executeJobAndSendBack(bytes calldata job) external returns (bool success) {
         (address router, bytes memory data, address token) = abi.decode(job, (address, bytes, address));
 
-        router.call(data);
+        (success,) = router.call(data);
 
         ERC20(token).transfer(msg.sender, ERC20(token).balanceOf(address(this)));
     }
