@@ -46,8 +46,9 @@ contract VaultTest is Test {
             address(daiOracle),
             address(wethOracle),
             epochDuration,
-            0,
-            amount
+            amount,
+            10 ** dai.decimals(),
+            10 ** weth.decimals()
         );
     }
 
@@ -84,14 +85,16 @@ contract VaultTest is Test {
             IAggregatorInterface sellTokenOracle,
             IAggregatorInterface buyTokenOracle,
             uint64 epochDuration,
-            uint8 decimalsDiff,
-            uint256 _amount
+            uint256 _amount,
+            uint256 _sellTokenDecimalsFactor,
+            uint256 _buyTokenDecimalsFactor
         ) = dca.dcaData();
         assertEq(address(sellTokenOracle), address(daiOracle));
         assertEq(address(buyTokenOracle), address(wethOracle));
         assertEq(epochDuration, time);
-        assertEq(decimalsDiff, 0);
         assertEq(_amount, amount);
+        assertEq(_sellTokenDecimalsFactor, 10 ** dai.decimals());
+        assertEq(_buyTokenDecimalsFactor, 10 ** weth.decimals());
     }
 
     function testExecuteDca() public {
@@ -150,7 +153,7 @@ contract VaultTest is Test {
 
         //exec & assert
         vm.prank(address(1111));
-        vm.expectRevert(stdError.arithmeticError); //assert that it will revert with arithmeticError
+        vm.expectRevert("TRANSFER_FAILED"); //assert that it will revert with "TRANSFER_FAILED"
         dca.executeDCA(
             address(worker),
             abi.encodeCall(

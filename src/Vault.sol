@@ -2,19 +2,21 @@
 pragma solidity ^0.8.17;
 
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
-import {CloneExtended} from "./CloneExtended.sol";
+import {Clone} from "clones-with-immutable-args/Clone.sol";
 import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
+import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
 /// @notice Sustainable and gas efficient DCA vault
-contract Vault is CloneExtended {
+contract Vault is Clone {
     /// -----------------------------------------------------------------------
     /// Errors
     /// -----------------------------------------------------------------------
     error OwnerOnly();
     error TooClose();
     error WorkerError();
+    error OracleError();
 
     /// -----------------------------------------------------------------------
     /// Events
@@ -26,6 +28,8 @@ contract Vault is CloneExtended {
     /// -----------------------------------------------------------------------
     /// Immutable variables
     /// -----------------------------------------------------------------------
+
+    uint256 private constant PRECISION = 1e24;
 
     ///@notice Address of the vault owner
     function owner() public pure returns (address _owner) {
@@ -46,8 +50,9 @@ contract Vault is CloneExtended {
     ///@return _sellTokenPriceFeed Address of the priceFeed
     ///@return _buyTokenPriceFeed Address of the priceFeed
     ///@return _epochDuration Minimum time between each buy
-    ///@return _decimalsDiff buyToken decimals - sellToken decimals
     ///@return _sellAmount Amount of token to sell
+    ///@return _sellTokenDecimalsFactor 10 ** sellToken.decimals()
+    ///@return _buyTokenDecimalsFactor 10 ** buyToken.decimals()
     function dcaData()
         public
         pure
@@ -55,16 +60,18 @@ contract Vault is CloneExtended {
             IAggregatorInterface _sellTokenPriceFeed,
             IAggregatorInterface _buyTokenPriceFeed,
             uint64 _epochDuration,
-            uint8 _decimalsDiff,
-            uint256 _sellAmount
+            uint256 _sellAmount,
+            uint256 _sellTokenDecimalsFactor,
+            uint256 _buyTokenDecimalsFactor
         )
     {
         return (
             IAggregatorInterface(_getArgAddress(60)),
             IAggregatorInterface(_getArgAddress(80)),
             _getArgUint64(100),
-            _getArgUint8(108),
-            _getArgUint256(109)
+            _getArgUint256(108),
+            _getArgUint256(140),
+            _getArgUint256(172)
         );
     }
 
@@ -98,8 +105,9 @@ contract Vault is CloneExtended {
             IAggregatorInterface sellTokenPriceFeed,
             IAggregatorInterface buyTokenPriceFeed,
             uint64 epochDuration,
-            uint8 decimalsDiff,
-            uint256 sellAmount
+            uint256 sellAmount,
+            uint256 sellTokenDecimalsFactor,
+            uint256 buyTokenDecimalsFactor
         ) = dcaData();
 
         if (lastBuy + epochDuration > block.timestamp) {
@@ -111,14 +119,25 @@ contract Vault is CloneExtended {
         uint256 sellTokenPriceUSD = uint256(sellTokenPriceFeed.latestAnswer());
         uint256 buyTokenPriceUSD = uint256(buyTokenPriceFeed.latestAnswer());
 
+        if (sellTokenPriceUSD == 0 || buyTokenPriceUSD == 0) {
+            revert OracleError();
+        }
+
         uint256 minAmount;
-        unchecked {
-            uint256 ratio = (sellTokenPriceUSD * 1e24) / buyTokenPriceUSD;
-            minAmount = (((ratio * sellAmount) * (10 ** decimalsDiff)) * 995) / 1000 / 1e24;
+        assembly {
+            //Because user can submit invalid sellTokenDecimalsFactor & buyTokenDecimalsFactor,
+            //bots should double check offchain as could end up in evm panicking and loss of gas
+            let ratio := div(mul(sellTokenPriceUSD, PRECISION), buyTokenPriceUSD)
+            minAmount := mul(ratio, sellAmount) // /!\ sellAmount could be 0
+            minAmount := div(minAmount, sellTokenDecimalsFactor) // /!\ sellTokenDecimalsFactor could be 0
+            minAmount := mul(minAmount, buyTokenDecimalsFactor) // /!\ sellTokenDecimalsFactor could be 0
+            minAmount := mul(minAmount, 995)
+            minAmount := div(minAmount, 1000)
+            minAmount := div(minAmount, PRECISION)
         }
 
         //send tokens to worker contract and call job
-        sellToken().transfer(worker, sellAmount);
+        SafeTransferLib.safeTransfer(sellToken(), worker, sellAmount);
         (bool success,) = worker.call(job);
         if (!success) {
             revert WorkerError(); //This is here only to help bots to save gas on a job/swap error
@@ -126,10 +145,10 @@ contract Vault is CloneExtended {
 
         //transfer minAmount minus fee to the owner.
         //will revert if worker didn't send back minAmount.
-        buyToken().transfer(owner(), minAmount);
+        SafeTransferLib.safeTransfer(buyToken(), owner(), minAmount);
 
         //transfer fee + remaining to executor/msg.sender
-        buyToken().transfer(msg.sender, buyToken().balanceOf(address(this)));
+        SafeTransferLib.safeTransfer(buyToken(), msg.sender, buyToken().balanceOf(address(this)));
 
         emit ExecuteDCA(minAmount);
     }

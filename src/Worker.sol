@@ -2,6 +2,7 @@
 pragma solidity ^0.8.17;
 
 import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
+import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 
 /// @title Worker
 /// @author HHK-ETH
@@ -12,7 +13,7 @@ contract Worker {
     /// @param router Address of the dex/aggregator to approve
     /// @param token Address of the token to approve
     function preApprove(address router, address token) external {
-        ERC20(token).approve(router, type(uint256).max);
+        SafeTransferLib.safeApprove(ERC20(token), router, type(uint256).max);
     }
 
     /// @notice Execute the swap on a given agg/dex
@@ -30,6 +31,6 @@ contract Worker {
 
         (success,) = router.call(data);
 
-        ERC20(token).transfer(msg.sender, ERC20(token).balanceOf(address(this)));
+        SafeTransferLib.safeTransfer(ERC20(token), msg.sender, ERC20(token).balanceOf(address(this)));
     }
 }

@@ -35,8 +35,9 @@ contract Factory {
     ///@param sellTokenPriceFeed Address of the priceFeed to use to determine sell token price
     ///@param buyTokenPriceFeed Address of the priceFeed to use to determine buy token price
     ///@param epochDuration Minimum time between each buy
-    ///@param decimalsDiff buyToken decimals - sellToken decimals
     ///@param amount Amount to use on each buy
+    ///@param sellTokenDecimalsFactor 10 ** sellToken.decimals()
+    ///@param buyTokenDecimalsFactor 10 ** buyToken.decimals()
     ///@return newVault Vault address
     function createDCA(
         address owner,
@@ -45,11 +46,20 @@ contract Factory {
         address sellTokenPriceFeed,
         address buyTokenPriceFeed,
         uint64 epochDuration,
-        uint8 decimalsDiff,
-        uint256 amount
+        uint256 amount,
+        uint256 sellTokenDecimalsFactor,
+        uint256 buyTokenDecimalsFactor
     ) external returns (Vault newVault) {
         bytes memory data = abi.encodePacked(
-            owner, sellToken, buyToken, sellTokenPriceFeed, buyTokenPriceFeed, epochDuration, decimalsDiff, amount
+            owner,
+            sellToken,
+            buyToken,
+            sellTokenPriceFeed,
+            buyTokenPriceFeed,
+            epochDuration,
+            amount,
+            sellTokenDecimalsFactor,
+            buyTokenDecimalsFactor
         );
         newVault = Vault(address(implementation).clone(data));
         emit CreateDCA(newVault);
