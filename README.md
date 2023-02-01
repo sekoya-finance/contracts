@@ -21,7 +21,8 @@
 #### Polygon
 
 - Implementation => 0x03904385adf2db963a3f865dd4a030cd17c3de9e
-- factory => 0x81C73A274B05138E9046f1097BFfE05d94F7181B
+- Factory => 0x81C73A274B05138E9046f1097BFfE05d94F7181B
+- Worker => 0x2F4C0c63634de8418017fdc9e192F105aeDDEbe7
 
 #### Arbitrum
 
