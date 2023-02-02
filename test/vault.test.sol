@@ -140,16 +140,31 @@ contract VaultTest is Test {
         );
     }
 
+    function testExecuteDca_fail_oracleError() public {
+        //setup
+        uint256 amount = 10 * 1e18;
+        uint64 time = 1 days;
+        Vault dca = deployDaiToWethVault(time, amount);
+        dai.transfer((address(dca)), amount);
+        daiOracle.setLatestAnswer(0); //set oracle to 0
+
+        //exec & assert
+        vm.prank(address(1111));
+        vm.expectRevert(Vault.OracleError.selector); //assert that it will revert with TooClose error
+        dca.executeDCA(
+            address(worker),
+            abi.encodeCall(
+                worker.executeJob, abi.encode(address(weth), abi.encodeCall(weth.transfer, (address(dca), 0)))
+            )
+        );
+    }
+
     function testExecuteDca_fail_notEnoughTokenReturned() public {
         //setup
         uint256 amount = 10 * 1e18;
         uint64 time = 1 days;
         Vault dca = deployDaiToWethVault(time, amount);
-        dai.transfer((address(dca)), amount * 2); //send enough dai to execute 2 orders
-        //execute dca once as lastBuy is 0
-        executeDaiToWethDca(dca, amount, address(1111));
-
-        vm.warp(block.timestamp + time); //Add 1 day time so we can execute the dca
+        dai.transfer((address(dca)), amount);
 
         //exec & assert
         vm.prank(address(1111));
