@@ -125,12 +125,10 @@ contract Vault is Clone {
 
         uint256 minAmount;
         assembly {
-            //Because user can submit invalid sellTokenDecimalsFactor & buyTokenDecimalsFactor,
-            //bots should double check offchain as could end up in evm panicking and loss of gas
             let ratio := div(mul(sellTokenPriceUSD, PRECISION), buyTokenPriceUSD)
-            minAmount := mul(ratio, sellAmount) // /!\ sellAmount could be 0
-            minAmount := div(minAmount, sellTokenDecimalsFactor) // /!\ sellTokenDecimalsFactor could be 0
-            minAmount := mul(minAmount, buyTokenDecimalsFactor) // /!\ sellTokenDecimalsFactor could be 0
+            minAmount := mul(ratio, sellAmount)
+            minAmount := div(minAmount, sellTokenDecimalsFactor)
+            minAmount := mul(minAmount, buyTokenDecimalsFactor)
             minAmount := mul(minAmount, 995)
             minAmount := div(minAmount, 1000)
             minAmount := div(minAmount, PRECISION)

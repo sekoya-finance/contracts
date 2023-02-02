@@ -40,15 +40,7 @@ contract VaultTest is Test {
     ///@notice Function to easily deploy a dai to weth vault
     function deployDaiToWethVault(uint64 epochDuration, uint256 amount) public returns (Vault dca) {
         return factory.createDCA(
-            address(this),
-            address(dai),
-            address(weth),
-            address(daiOracle),
-            address(wethOracle),
-            epochDuration,
-            amount,
-            10 ** dai.decimals(),
-            10 ** weth.decimals()
+            address(this), address(dai), address(weth), address(daiOracle), address(wethOracle), epochDuration, amount
         );
     }
 

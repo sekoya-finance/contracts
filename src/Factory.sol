@@ -36,8 +36,6 @@ contract Factory {
     ///@param buyTokenPriceFeed Address of the priceFeed to use to determine buy token price
     ///@param epochDuration Minimum time between each buy
     ///@param amount Amount to use on each buy
-    ///@param sellTokenDecimalsFactor 10 ** sellToken.decimals()
-    ///@param buyTokenDecimalsFactor 10 ** buyToken.decimals()
     ///@return newVault Vault address
     function createDCA(
         address owner,
@@ -46,10 +44,12 @@ contract Factory {
         address sellTokenPriceFeed,
         address buyTokenPriceFeed,
         uint64 epochDuration,
-        uint256 amount,
-        uint256 sellTokenDecimalsFactor,
-        uint256 buyTokenDecimalsFactor
+        uint256 amount
     ) external returns (Vault newVault) {
+        //precompute and store decimals diff to save gas on each execute
+        uint256 sellTokenDecimalsFactor = 10 ** ERC20(sellToken).decimals();
+        uint256 buyTokenDecimalsFactor = 10 ** ERC20(buyToken).decimals();
+
         bytes memory data = abi.encodePacked(
             owner,
             sellToken,
