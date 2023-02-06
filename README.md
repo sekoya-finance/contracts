@@ -20,8 +20,8 @@
 
 #### Polygon
 
-- Implementation => 0xb497d9566E514F7BFA94d78e480cD07a9D3Fef63
-- Factory => 0xE832e7b348215A87507b1EaF0ea4c2EFb29dDe00
+- Implementation => 0x5d52e426F10D0061fD1eF839AC2195C4D6038D50
+- Factory => 0x1Ab31972C5e3aFE7461cCF0b750aBe53FC583939
 
 #### Arbitrum
 
