@@ -14,7 +14,7 @@ contract Vault is Clone {
     /// -----------------------------------------------------------------------
     error OwnerOnly();
     error TooClose();
-    error WorkerError();
+    error NotEnough();
     error OracleError();
 
     /// -----------------------------------------------------------------------
@@ -131,26 +131,25 @@ contract Vault is Clone {
             minAmount := div(minAmount, PRECISION)
         }
 
+        //save current balance
+        uint256 previousBalance = bento().balanceOf(buyToken(), address(this));
         //send tokens to worker contract and call job
         bento().transfer(sellToken(), address(this), worker, sellAmount);
-        (bool success,) = worker.call(job);
-        if (!success) {
-            revert WorkerError(); //This is here only to help bots to save gas on a job/swap error
+        worker.call(job);
+
+        //Check if received enough
+        uint256 minAmountToShare = bento().toShare(buyToken(), minAmount, false);
+        uint256 newBalance = bento().balanceOf(buyToken(), address(this));
+        if (newBalance < previousBalance + minAmountToShare) {
+            revert NotEnough();
         }
 
-        //transfer minAmount minus fee to the owner.
-        //will revert if worker didn't send back minAmount.
-        bento().transfer(buyToken(), address(this), owner(), minAmount);
-
-        //transfer fee + remaining to executor/msg.sender
-        bento().transfer(buyToken(), address(this), msg.sender, bento().balanceOf(buyToken(), address(this)));
-
-        emit ExecuteDCA(minAmount);
+        emit ExecuteDCA(newBalance);
     }
 
     ///@notice Allow the owner to withdraw its token from the vault
-    function withdraw(uint256 amount) external onlyOwner {
-        bento().withdraw(sellToken(), address(this), owner(), amount, 0);
+    function withdraw(IERC20 token, uint256 amount) external onlyOwner {
+        bento().withdraw(token, address(this), owner(), amount, 0);
         emit Withdraw(amount);
     }
 
@@ -158,6 +157,7 @@ contract Vault is Clone {
     ///@notice Doesn't use selfdestruct as it is deprecated
     function cancel() external onlyOwner {
         bento().withdraw(sellToken(), address(this), owner(), 0, bento().balanceOf(sellToken(), address(this)));
+        bento().withdraw(buyToken(), address(this), owner(), 0, bento().balanceOf(buyToken(), address(this)));
         emit Cancel();
     }
 

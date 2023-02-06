@@ -79,7 +79,7 @@ contract VaultTest is Test {
         uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
         uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
         uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
-        wethAmount = (ratio * amount) / 1e24;
+        wethAmount = (ratio * amount * 995) / 1000 / 1e24;
 
         Multicall3.Call[] memory calls = new Multicall3.Call[](1);
         bytes memory jobCallData =
@@ -124,17 +124,13 @@ contract VaultTest is Test {
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
 
         //save balances
-        uint256 oldOwnerBalance = bento.balanceOf(IERC20(address(weth)), address(this));
-        uint256 oldExecutorBalance = bento.balanceOf(IERC20(address(weth)), EXECUTOR);
+        uint256 oldVaultBalance = bento.balanceOf(IERC20(address(weth)), address(dca));
 
         //exec
         uint256 wethAmount = executeDaiToWethDca(dca, SELL_AMOUNT, EXECUTOR);
 
         //assert
-        assertEq(bento.balanceOf(IERC20(address(weth)), address(this)), oldOwnerBalance + (wethAmount * 995 / 1000));
-        assertEq(
-            bento.balanceOf(IERC20(address(weth)), EXECUTOR), oldExecutorBalance + (wethAmount * (1000 - 995) / 1000)
-        );
+        assertEq(bento.balanceOf(IERC20(address(weth)), address(dca)), oldVaultBalance + wethAmount);
     }
 
     function testExecuteDca_fail_tooClose() public {
@@ -170,7 +166,7 @@ contract VaultTest is Test {
 
         //exec & assert
         vm.prank(EXECUTOR);
-        vm.expectRevert(stdError.arithmeticError); //assert that it will revert with "TRANSFER_FAILED"
+        vm.expectRevert(Vault.NotEnough.selector); //assert that it will revert with "TRANSFER_FAILED"
         dca.executeDCA(address(multicall), abi.encodeCall(multicall.aggregate, (calls)));
     }
 
@@ -183,7 +179,7 @@ contract VaultTest is Test {
         uint256 oldOwnerBalance = dai.balanceOf(address(this));
 
         //exec
-        dca.withdraw(SELL_AMOUNT);
+        dca.withdraw(IERC20(address(dai)), SELL_AMOUNT);
 
         //assert
         assertEq(bento.balanceOf(IERC20(address(dai)), address(dca)), oldVaultBalance - SELL_AMOUNT);
@@ -198,7 +194,7 @@ contract VaultTest is Test {
         //exec & assert
         vm.prank(address(8888));
         vm.expectRevert(Vault.OwnerOnly.selector);
-        dca.withdraw(SELL_AMOUNT);
+        dca.withdraw(IERC20(address(dai)), SELL_AMOUNT);
     }
 
     function testCancel() public {
@@ -206,15 +202,19 @@ contract VaultTest is Test {
         Vault dca = deployDaiToWethVault();
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
 
-        uint256 oldVaultBalance = bento.balanceOf(IERC20(address(dai)), address(dca));
-        uint256 oldOwnerBalance = dai.balanceOf(address(this));
+        uint256 oldVaultBalanceDai = bento.balanceOf(IERC20(address(dai)), address(dca));
+        uint256 oldVaultBalanceWeth = bento.balanceOf(IERC20(address(weth)), address(dca));
+        uint256 oldOwnerBalanceDai = dai.balanceOf(address(this));
+        uint256 oldOwnerBalanceWeth = weth.balanceOf(address(this));
 
         //exec
         dca.cancel();
 
         //assert
-        assertEq(dai.balanceOf(address(dca)), 0);
-        assertEq(dai.balanceOf(address(this)), oldOwnerBalance + oldVaultBalance);
+        assertEq(bento.balanceOf(IERC20(address(dai)), address(dca)), 0);
+        assertEq(bento.balanceOf(IERC20(address(weth)), address(dca)), 0);
+        assertEq(dai.balanceOf(address(this)), oldOwnerBalanceDai + oldVaultBalanceDai);
+        assertEq(weth.balanceOf(address(this)), oldOwnerBalanceWeth + oldVaultBalanceWeth);
     }
 
     function testCancel_fail_ownerOnly() public {
