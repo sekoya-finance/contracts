@@ -4,15 +4,15 @@ pragma solidity ^0.8.17;
 import {Test, stdError} from "forge-std/Test.sol";
 import {Factory} from "../src/Factory.sol";
 import {Vault} from "../src/Vault.sol";
-import {Worker} from "../src/Worker.sol";
 import {Token} from "../src/mocks/Token.sol";
 import {PriceAggregator, IAggregatorInterface} from "../src/mocks/PriceAggregator.sol";
 import {BentoBoxV1 as BentoBox, IERC20} from "../src/flat/BentoBox.sol";
+import {Multicall3} from "../src/flat/Multicall3.sol";
 
 contract VaultTest is Test {
     Factory factory;
     Vault vault;
-    Worker worker;
+    Multicall3 multicall;
     Token dai;
     Token weth;
     PriceAggregator daiOracle;
@@ -29,7 +29,7 @@ contract VaultTest is Test {
         //deploy contracts
         vault = new Vault();
         factory = new Factory(vault);
-        worker = new Worker();
+        multicall = new Multicall3();
         dai = new Token("DAI", "DAI", 18, 1000 * 1e18);
         SELL_AMOUNT = 10 * 10 ** dai.decimals();
         weth = new Token("WETH", "WETH", 18, 1000* 1e18);
@@ -41,9 +41,12 @@ contract VaultTest is Test {
         wethOracle = new PriceAggregator(8);
         wethOracle.setLatestAnswer(500 * 1e8);
 
-        //Give a bunch of WETH to worker & preApprove bento to execute orders
-        weth.transfer(address(worker), 500 * 1e18);
-        worker.preApprove(address(bento), address(weth));
+        //Give a bunch of WETH to multicall & preApprove bento to execute orders
+        //This is to simplify tests, in production real router & swap data will be sent to multicall
+        weth.transfer(address(multicall), 500 * 1e18);
+        Multicall3.Call[] memory calls = new Multicall3.Call[](1);
+        calls[0] = Multicall3.Call(address(weth), abi.encodeCall(weth.approve, (address(bento), UINT256_MAX)));
+        multicall.aggregate(calls);
 
         //Pre Approve DAI & WETH on bentobox & preDeposit
         dai.approve(address(bento), UINT256_MAX);
@@ -72,17 +75,19 @@ contract VaultTest is Test {
 
     ///@notice Function to easily execute a dca
     function executeDaiToWethDca(Vault dca, uint256 amount, address executor) public returns (uint256 wethAmount) {
-        //determine price & send weth to worker to emulate a swap with just executing a transfer back to the vault
+        //determine price & send weth to multicall to emulate a swap with just executing a transfer back to the vault
         uint256 daiTokenPrice = uint256(daiOracle.latestAnswer());
         uint256 wethTokenPrice = uint256(wethOracle.latestAnswer());
         uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
         wethAmount = (ratio * amount) / 1e24;
 
+        Multicall3.Call[] memory calls = new Multicall3.Call[](1);
         bytes memory jobCallData =
-            abi.encodeCall(bento.deposit, (IERC20(address(weth)), address(worker), address(dca), wethAmount, 0));
+            abi.encodeCall(bento.deposit, (IERC20(address(weth)), address(multicall), address(dca), wethAmount, 0));
+        calls[0] = Multicall3.Call(address(bento), jobCallData);
 
         vm.prank(executor);
-        dca.executeDCA(address(worker), abi.encodeCall(worker.executeJob, abi.encode(address(bento), jobCallData)));
+        dca.executeDCA(address(multicall), abi.encodeCall(multicall.aggregate, (calls)));
     }
 
     function testDeployDAItoWETHVault() public {
@@ -140,7 +145,7 @@ contract VaultTest is Test {
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(Vault.TooClose.selector); //assert that it will revert with TooClose error
-        dca.executeDCA(address(worker), "");
+        dca.executeDCA(address(multicall), "");
     }
 
     function testExecuteDca_fail_oracleError() public {
@@ -153,10 +158,7 @@ contract VaultTest is Test {
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(Vault.OracleError.selector); //assert that it will revert with TooClose error
-        dca.executeDCA(
-            address(worker),
-            ""
-        );
+        dca.executeDCA(address(multicall), "");
     }
 
     function testExecuteDca_fail_notEnoughTokenReturned() public {
@@ -164,14 +166,12 @@ contract VaultTest is Test {
         Vault dca = deployDaiToWethVault();
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
+        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(stdError.arithmeticError); //assert that it will revert with "TRANSFER_FAILED"
-        dca.executeDCA(
-            address(worker),
-            abi.encodeCall(worker.executeJob, (abi.encode(address(0), "")))
-        );
+        dca.executeDCA(address(multicall), abi.encodeCall(multicall.aggregate, (calls)));
     }
 
     function testWithdraw() public {
@@ -186,7 +186,7 @@ contract VaultTest is Test {
         dca.withdraw(SELL_AMOUNT);
 
         //assert
-        assertEq(bento.balanceOf(IERC20(address(dai)),address(dca)), oldVaultBalance - SELL_AMOUNT);
+        assertEq(bento.balanceOf(IERC20(address(dai)), address(dca)), oldVaultBalance - SELL_AMOUNT);
         assertEq(dai.balanceOf(address(this)), oldOwnerBalance + SELL_AMOUNT);
     }
 

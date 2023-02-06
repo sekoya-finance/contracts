@@ -167,8 +167,7 @@ contract Vault is Clone {
         if (lastBuy == 0) {
             if (waitEpochPeriod) {
                 lastBuy = block.timestamp;
-            }
-            else {
+            } else {
                 lastBuy = 1;
             }
         }
