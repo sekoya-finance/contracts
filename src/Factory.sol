@@ -29,39 +29,23 @@ contract Factory {
     /// -----------------------------------------------------------------------
 
     ///@notice Deploy a new DCA vault
-    ///@param owner Address of the owner of the vault
-    ///@param sellToken Address of the token to sell
-    ///@param buyToken Address of the token to buy
-    ///@param sellTokenPriceFeed Address of the priceFeed to use to determine sell token price
-    ///@param buyTokenPriceFeed Address of the priceFeed to use to determine buy token price
-    ///@param epochDuration Minimum time between each buy
-    ///@param amount Amount to use on each buy
+    ///@param params ABI encode packed of params
     ///@return newVault Vault address
-    function createDCA(
-        address owner,
-        address sellToken,
-        address buyToken,
-        address sellTokenPriceFeed,
-        address buyTokenPriceFeed,
-        uint64 epochDuration,
-        uint256 amount
-    ) external returns (Vault newVault) {
-        //precompute and store decimals diff to save gas on each execute
-        uint256 sellTokenDecimalsFactor = 10 ** ERC20(sellToken).decimals();
-        uint256 buyTokenDecimalsFactor = 10 ** ERC20(buyToken).decimals();
+    ///@param waitEpochPeriod false so first execDca can be called or true to wait for epochPeriod before first exec
+    function createDCA(bytes calldata params, bool waitEpochPeriod) external returns (Vault newVault) {
+        //address bentobox address
+        //address owner Address of the owner of the vault
+        //address sellToken Address of the token to sell
+        //address buyToken Address of the token to buy
+        //address sellTokenPriceFeed Address of the priceFeed to use to determine sell token price
+        //address buyTokenPriceFeed Address of the priceFeed to use to determine buy token price
+        //uint64 epochDuration Minimum time between each buy
+        //uint256 amount Amount to use on each buy
+        //uint256 sellTokenDecimalsFactor 10 ** ERC20(sellToken).decimals();
+        //uint256 buyTokenDecimalsFactor 10 ** ERC20(buyToken).decimals();
 
-        bytes memory data = abi.encodePacked(
-            owner,
-            sellToken,
-            buyToken,
-            sellTokenPriceFeed,
-            buyTokenPriceFeed,
-            epochDuration,
-            amount,
-            sellTokenDecimalsFactor,
-            buyTokenDecimalsFactor
-        );
-        newVault = Vault(address(implementation).clone(data));
+        newVault = Vault(address(implementation).clone(params));
+        newVault.setLastBuy(waitEpochPeriod);
         emit CreateDCA(newVault);
     }
 }

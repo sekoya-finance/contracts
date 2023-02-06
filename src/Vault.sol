@@ -2,9 +2,8 @@
 pragma solidity ^0.8.17;
 
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
+import {BentoBoxV1 as BentoBox, IERC20} from "./flat/BentoBox.sol";
 import {Clone} from "clones-with-immutable-args/Clone.sol";
-import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
-import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
@@ -23,7 +22,7 @@ contract Vault is Clone {
     /// -----------------------------------------------------------------------
     event ExecuteDCA(uint256 received);
     event Withdraw(uint256 amount);
-    event TurnOff();
+    event Cancel();
 
     /// -----------------------------------------------------------------------
     /// Immutable variables
@@ -31,19 +30,24 @@ contract Vault is Clone {
 
     uint256 private constant PRECISION = 1e24;
 
+    ///@notice Address of the BentoBox
+    function bento() public pure returns (BentoBox) {
+        return BentoBox(payable(_getArgAddress(0)));
+    }
+
     ///@notice Address of the vault owner
-    function owner() public pure returns (address _owner) {
-        return _getArgAddress(0);
+    function owner() public pure returns (address) {
+        return _getArgAddress(20);
     }
 
     ///@notice Address of the token to sell
-    function sellToken() public pure returns (ERC20 _sellToken) {
-        return ERC20(_getArgAddress(20));
+    function sellToken() public pure returns (IERC20) {
+        return IERC20(_getArgAddress(40));
     }
 
     ///@notice Address of the token to buy
-    function buyToken() public pure returns (ERC20 _buyToken) {
-        return ERC20(_getArgAddress(40));
+    function buyToken() public pure returns (IERC20) {
+        return IERC20(_getArgAddress(60));
     }
 
     ///@notice Infos about the DCA
@@ -56,22 +60,15 @@ contract Vault is Clone {
     function dcaData()
         public
         pure
-        returns (
-            IAggregatorInterface _sellTokenPriceFeed,
-            IAggregatorInterface _buyTokenPriceFeed,
-            uint64 _epochDuration,
-            uint256 _sellAmount,
-            uint256 _sellTokenDecimalsFactor,
-            uint256 _buyTokenDecimalsFactor
-        )
+        returns (IAggregatorInterface, IAggregatorInterface, uint64, uint256, uint256, uint256)
     {
         return (
-            IAggregatorInterface(_getArgAddress(60)),
             IAggregatorInterface(_getArgAddress(80)),
-            _getArgUint64(100),
-            _getArgUint256(108),
-            _getArgUint256(140),
-            _getArgUint256(172)
+            IAggregatorInterface(_getArgAddress(100)),
+            _getArgUint64(120),
+            _getArgUint256(128),
+            _getArgUint256(160),
+            _getArgUint256(192)
         );
     }
 
@@ -79,7 +76,7 @@ contract Vault is Clone {
     /// Mutable variables
     /// -----------------------------------------------------------------------
 
-    ///@notice Store last buy timestamp
+    ///@notice Store last buy timestamp, init as block.timestamp
     uint256 public lastBuy;
 
     /// -----------------------------------------------------------------------
@@ -135,7 +132,7 @@ contract Vault is Clone {
         }
 
         //send tokens to worker contract and call job
-        SafeTransferLib.safeTransfer(sellToken(), worker, sellAmount);
+        bento().transfer(sellToken(), address(this), worker, sellAmount);
         (bool success,) = worker.call(job);
         if (!success) {
             revert WorkerError(); //This is here only to help bots to save gas on a job/swap error
@@ -143,24 +140,37 @@ contract Vault is Clone {
 
         //transfer minAmount minus fee to the owner.
         //will revert if worker didn't send back minAmount.
-        SafeTransferLib.safeTransfer(buyToken(), owner(), minAmount);
+        bento().transfer(buyToken(), address(this), owner(), minAmount);
 
         //transfer fee + remaining to executor/msg.sender
-        SafeTransferLib.safeTransfer(buyToken(), msg.sender, buyToken().balanceOf(address(this)));
+        bento().transfer(buyToken(), address(this), msg.sender, bento().balanceOf(buyToken(), address(this)));
 
         emit ExecuteDCA(minAmount);
     }
 
     ///@notice Allow the owner to withdraw its token from the vault
     function withdraw(uint256 amount) external onlyOwner {
-        sellToken().transfer(owner(), amount);
+        bento().withdraw(sellToken(), address(this), owner(), amount, 0);
         emit Withdraw(amount);
     }
 
-    ///@notice Allow the owner to withdraw total balance and emit a turnOff event so UI can stop indexing the contract
-    ///@notice Doesn't use selfdestruct in case owner keep sending tokens to this address
-    function turnOff() external onlyOwner {
-        sellToken().transfer(owner(), sellToken().balanceOf(address(this)));
-        emit TurnOff();
+    ///@notice Allow the owner to withdraw total balance and emit a Cancel event so UI stop showing the contract
+    ///@notice Doesn't use selfdestruct as it is deprecated
+    function cancel() external onlyOwner {
+        bento().withdraw(sellToken(), address(this), owner(), 0, bento().balanceOf(sellToken(), address(this)));
+        emit Cancel();
+    }
+
+    ///@notice function to set last buy on vault creation
+    ///@param waitEpochPeriod false to set to 1 so first execDca can be called or true to wait for epochPeriod before first exec
+    function setLastBuy(bool waitEpochPeriod) external {
+        if (lastBuy == 0) {
+            if (waitEpochPeriod) {
+                lastBuy = block.timestamp;
+            }
+            else {
+                lastBuy = 1;
+            }
+        }
     }
 }
