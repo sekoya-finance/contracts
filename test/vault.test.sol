@@ -87,7 +87,7 @@ contract VaultTest is Test {
         calls[0] = Multicall3.Call(address(bento), jobCallData);
 
         vm.prank(executor);
-        dca.executeDCA(address(multicall), abi.encodeCall(multicall.aggregate, (calls)));
+        dca.executeDCA(multicall, calls);
     }
 
     function testDeployDAItoWETHVault() public {
@@ -137,11 +137,12 @@ contract VaultTest is Test {
         //setup
         Vault dca = deployDaiToWethVault();
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
+        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(Vault.TooClose.selector); //assert that it will revert with TooClose error
-        dca.executeDCA(address(multicall), "");
+        dca.executeDCA(multicall, calls);
     }
 
     function testExecuteDca_fail_oracleError() public {
@@ -150,11 +151,12 @@ contract VaultTest is Test {
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
         daiOracle.setLatestAnswer(0); //set oracle to 0
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
+        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(Vault.OracleError.selector); //assert that it will revert with TooClose error
-        dca.executeDCA(address(multicall), "");
+        dca.executeDCA(multicall, calls);
     }
 
     function testExecuteDca_fail_notEnoughTokenReturned() public {
@@ -167,7 +169,7 @@ contract VaultTest is Test {
         //exec & assert
         vm.prank(EXECUTOR);
         vm.expectRevert(Vault.NotEnough.selector); //assert that it will revert with "TRANSFER_FAILED"
-        dca.executeDCA(address(multicall), abi.encodeCall(multicall.aggregate, (calls)));
+        dca.executeDCA(multicall, calls);
     }
 
     function testWithdraw() public {

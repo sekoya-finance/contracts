@@ -4,6 +4,7 @@ pragma solidity ^0.8.17;
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
 import {BentoBoxV1 as BentoBox, IERC20} from "./flat/BentoBox.sol";
 import {Clone} from "clones-with-immutable-args/Clone.sol";
+import {Multicall3} from "./flat/Multicall3.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
@@ -95,9 +96,9 @@ contract Vault is Clone {
     /// -----------------------------------------------------------------------
 
     ///@notice Execute the DCA buy
-    ///@param worker Contract that will execute the swap
-    ///@param job calldata to execute on the contract
-    function executeDCA(address worker, bytes calldata job) external {
+    ///@param multicall Multicall contract
+    ///@param calls Actions to execute on the multicall
+    function executeDCA(Multicall3 multicall, Multicall3.Call[] calldata calls) external {
         (
             IAggregatorInterface sellTokenPriceFeed,
             IAggregatorInterface buyTokenPriceFeed,
@@ -134,8 +135,8 @@ contract Vault is Clone {
         //save current balance
         uint256 previousBalance = bento().balanceOf(buyToken(), address(this));
         //send tokens to worker contract and call job
-        bento().transfer(sellToken(), address(this), worker, sellAmount);
-        worker.call(job);
+        bento().transfer(sellToken(), address(this), address(multicall), sellAmount);
+        multicall.aggregate(calls);
 
         //Check if received enough
         uint256 minAmountToShare = bento().toShare(buyToken(), minAmount, false);
