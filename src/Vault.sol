@@ -21,7 +21,7 @@ contract Vault is Clone {
     /// -----------------------------------------------------------------------
     /// Events
     /// -----------------------------------------------------------------------
-    event ExecuteDCA(uint256 newBalance);
+    event ExecuteDCA(uint256 received);
     event Withdraw(uint256 amount);
     event Cancel();
 
@@ -140,12 +140,12 @@ contract Vault is Clone {
 
         //Check if received enough
         uint256 minAmountToShare = bento().toShare(buyToken(), minAmount, false);
-        uint256 newBalance = bento().balanceOf(buyToken(), address(this));
-        if (newBalance < previousBalance + minAmountToShare) {
+        uint256 received = bento().balanceOf(buyToken(), address(this)) - previousBalance;
+        if (received < minAmountToShare) {
             revert NotEnough();
         }
 
-        emit ExecuteDCA(newBalance);
+        emit ExecuteDCA(received);
     }
 
     ///@notice Allow the owner to withdraw its token from the vault
