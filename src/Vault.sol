@@ -22,7 +22,7 @@ contract Vault is Clone {
     /// Events
     /// -----------------------------------------------------------------------
     event ExecuteDCA(uint256 received);
-    event Withdraw(uint256 amount);
+    event Withdraw(IERC20 token, uint256 amount);
     event Cancel();
 
     /// -----------------------------------------------------------------------
@@ -151,7 +151,7 @@ contract Vault is Clone {
     ///@notice Allow the owner to withdraw its token from the vault
     function withdraw(IERC20 token, uint256 amount) external onlyOwner {
         bento().withdraw(token, address(this), owner(), amount, 0);
-        emit Withdraw(amount);
+        emit Withdraw(token, amount);
     }
 
     ///@notice Allow the owner to withdraw total balance and emit a Cancel event so UI stop showing the contract
