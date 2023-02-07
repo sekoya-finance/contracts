@@ -5,6 +5,7 @@
 ### Benefits
 
 - **Decentralized** - Everything is onchain, your vault, your tokens.
+- **Yield bearing** - Built on Bentobox to generate yield on your assets.
 - **Always at market price** - Double check with oracles like chainlink on every order to make sure the executed price = market price.
 - **Open** - Bots are incentived to monitor and execute transactions as they receive up to x% (see fees per network) on every orders.
 - **Low fees and low minimum amount** - No minimum amount by default and only 0.5% fee per order. But keep in mind that if gas cost are too high compared to the fees to be made, bots might not execute your orders.
