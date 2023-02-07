@@ -21,7 +21,7 @@ contract Vault is Clone {
     /// -----------------------------------------------------------------------
     /// Events
     /// -----------------------------------------------------------------------
-    event ExecuteDCA(uint256 received);
+    event ExecuteDCA(uint256 newBalance);
     event Withdraw(uint256 amount);
     event Cancel();
 
