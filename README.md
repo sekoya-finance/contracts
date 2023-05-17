@@ -6,8 +6,8 @@
 
 - **Decentralized** - Everything is onchain, your vault, your tokens.
 - **Yield bearing** - Built on Bentobox to generate yield on your assets.
-- **Always at market price** - Double check with oracles like chainlink on every order to make sure the executed price = market price.
-- **Open** - Bots are incentived to monitor and execute transactions as they receive up to x% (see fees per network) on every orders.
+- **Always at market price** - Double check with oracles like chainlink on every order to make sure the executed price is close to market price.
+- **Open** - Anyone can setup a bot monitor and execute transactions to receive up to 0.5% on every orders.
 - **Low fees and low minimum amount** - No minimum amount by default and only 0.5% fee per order. But keep in mind that if gas cost are too high compared to the fees to be made, bots might not execute your orders.
 
 |                                      | Polygon | Arbitrum | Optimism | BSC    | Avalanche | Fantom |
@@ -21,8 +21,8 @@
 
 #### Polygon
 
-- Implementation => 0x15A3A246f22424fc269F8ef06E824BBDC005802D
-- Factory => 0x46a86A07050aDD0E620a13ad343418D133F73cfD
+- Implementation => 0xc93dd71b276911ad69446dbddb8702b5b5d58fb3
+- Factory => 0x32d98F348D88c932c89966Af684BC046fFd1bAd4
 
 #### Arbitrum
 
