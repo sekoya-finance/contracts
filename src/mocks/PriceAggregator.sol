@@ -14,4 +14,13 @@ contract PriceAggregator is IAggregatorInterface {
     function setLatestAnswer(int256 answer) public {
         latestAnswer = answer;
     }
+
+    function latestRoundData()
+        external
+        view
+        override
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
+    {
+        return (0, latestAnswer, block.timestamp, block.timestamp, 0);
+    }
 }

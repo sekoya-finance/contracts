@@ -113,23 +113,22 @@ contract Vault is Clone {
         }
         lastBuy = block.timestamp;
 
-        //query oracles and determine minAmount, both priceFeed must have same decimals.
-        uint256 sellTokenPriceUSD = uint256(sellTokenPriceFeed.latestAnswer());
-        uint256 buyTokenPriceUSD = uint256(buyTokenPriceFeed.latestAnswer());
-
-        if (sellTokenPriceUSD == 0 || buyTokenPriceUSD == 0) {
-            revert OracleError();
-        }
-
         uint256 minAmount;
-        assembly {
-            let ratio := div(mul(sellTokenPriceUSD, PRECISION), buyTokenPriceUSD)
-            minAmount := mul(ratio, sellAmount)
-            minAmount := div(minAmount, sellTokenDecimalsFactor)
-            minAmount := mul(minAmount, buyTokenDecimalsFactor)
-            minAmount := mul(minAmount, 995)
-            minAmount := div(minAmount, 1000)
-            minAmount := div(minAmount, PRECISION)
+        //Put minAmount calculation in a block to avoid stack too deep
+        {
+            //query oracles and determine minAmount, both priceFeed must have same decimals.
+            uint256 sellTokenPriceUSD = getPrice(sellTokenPriceFeed);
+            uint256 buyTokenPriceUSD = getPrice(buyTokenPriceFeed);
+
+            assembly {
+                let ratio := div(mul(sellTokenPriceUSD, PRECISION), buyTokenPriceUSD)
+                minAmount := mul(ratio, sellAmount)
+                minAmount := div(minAmount, sellTokenDecimalsFactor)
+                minAmount := mul(minAmount, buyTokenDecimalsFactor)
+                minAmount := mul(minAmount, 995)
+                minAmount := div(minAmount, 1000)
+                minAmount := div(minAmount, PRECISION)
+            }
         }
 
         //save current balance
@@ -172,5 +171,13 @@ contract Vault is Clone {
                 lastBuy = 1;
             }
         }
+    }
+
+    function getPrice(IAggregatorInterface sellTokenPriceFeed) internal view returns (uint256) {
+        (, int256 integerPrice,,,) = sellTokenPriceFeed.latestRoundData();
+        if (integerPrice <= 0) {
+            revert OracleError();
+        }
+        return uint256(integerPrice);
     }
 }
