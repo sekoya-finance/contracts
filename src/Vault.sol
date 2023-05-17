@@ -2,9 +2,10 @@
 pragma solidity ^0.8.17;
 
 import {IAggregatorInterface} from "./interfaces/IAggregator.sol";
-import {BentoBoxV1 as BentoBox, IERC20} from "./flat/BentoBox.sol";
+import {IBentoBox} from "./interfaces/IBentoBox.sol";
 import {Clone} from "clones-with-immutable-args/Clone.sol";
-import {Multicall3} from "./flat/Multicall3.sol";
+import {IMulticall3} from "./interfaces/IMulticall3.sol";
+import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 
 /// @title DCA vault implementation
 /// @author HHK-ETH
@@ -22,7 +23,7 @@ contract Vault is Clone {
     /// Events
     /// -----------------------------------------------------------------------
     event ExecuteDCA(uint256 received);
-    event Withdraw(IERC20 token, uint256 amount);
+    event Withdraw(ERC20 token, uint256 amount);
     event Cancel();
 
     /// -----------------------------------------------------------------------
@@ -32,8 +33,8 @@ contract Vault is Clone {
     uint256 private constant PRECISION = 1e24;
 
     ///@notice Address of the BentoBox
-    function bento() public pure returns (BentoBox) {
-        return BentoBox(payable(_getArgAddress(0)));
+    function bento() public pure returns (IBentoBox) {
+        return IBentoBox(payable(_getArgAddress(0)));
     }
 
     ///@notice Address of the vault owner
@@ -42,13 +43,13 @@ contract Vault is Clone {
     }
 
     ///@notice Address of the token to sell
-    function sellToken() public pure returns (IERC20) {
-        return IERC20(_getArgAddress(40));
+    function sellToken() public pure returns (ERC20) {
+        return ERC20(_getArgAddress(40));
     }
 
     ///@notice Address of the token to buy
-    function buyToken() public pure returns (IERC20) {
-        return IERC20(_getArgAddress(60));
+    function buyToken() public pure returns (ERC20) {
+        return ERC20(_getArgAddress(60));
     }
 
     ///@notice Infos about the DCA
@@ -98,7 +99,7 @@ contract Vault is Clone {
     ///@notice Execute the DCA buy
     ///@param multicall Multicall contract
     ///@param calls Actions to execute on the multicall
-    function executeDCA(Multicall3 multicall, Multicall3.Call[] calldata calls) external {
+    function executeDCA(IMulticall3 multicall, IMulticall3.Call[] calldata calls) external {
         (
             IAggregatorInterface sellTokenPriceFeed,
             IAggregatorInterface buyTokenPriceFeed,
@@ -148,7 +149,7 @@ contract Vault is Clone {
     }
 
     ///@notice Allow the owner to withdraw its token from the vault
-    function withdraw(IERC20 token, uint256 amount) external onlyOwner {
+    function withdraw(ERC20 token, uint256 amount) external onlyOwner {
         bento().withdraw(token, address(this), owner(), amount, 0);
         emit Withdraw(token, amount);
     }

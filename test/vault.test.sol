@@ -6,13 +6,15 @@ import {Factory} from "../src/Factory.sol";
 import {Vault} from "../src/Vault.sol";
 import {Token} from "../src/mocks/Token.sol";
 import {PriceAggregator, IAggregatorInterface} from "../src/mocks/PriceAggregator.sol";
-import {BentoBoxV1 as BentoBox, IERC20} from "../src/flat/BentoBox.sol";
-import {Multicall3} from "../src/flat/Multicall3.sol";
+import {BentoBoxV1 as BentoBox, IERC20} from "../lib/imports/flat/BentoBox.sol";
+import {Multicall3} from "../lib/imports/flat/Multicall3.sol";
+import {IMulticall3} from "../src/interfaces/IMulticall3.sol";
+import {ERC20} from "lib/solmate/src/tokens/ERC20.sol";
 
 contract VaultTest is Test {
     Factory factory;
     Vault vault;
-    Multicall3 multicall;
+    IMulticall3 multicall;
     Token dai;
     Token weth;
     PriceAggregator daiOracle;
@@ -29,7 +31,7 @@ contract VaultTest is Test {
         //deploy contracts
         vault = new Vault();
         factory = new Factory(vault);
-        multicall = new Multicall3();
+        multicall = IMulticall3(address(new Multicall3()));
         dai = new Token("DAI", "DAI", 18, 1000 * 1e18);
         SELL_AMOUNT = 10 * 10 ** dai.decimals();
         weth = new Token("WETH", "WETH", 18, 1000* 1e18);
@@ -44,8 +46,8 @@ contract VaultTest is Test {
         //Give a bunch of WETH to multicall & preApprove bento to execute orders
         //This is to simplify tests, in production real router & swap data will be sent to multicall
         weth.transfer(address(multicall), 500 * 1e18);
-        Multicall3.Call[] memory calls = new Multicall3.Call[](1);
-        calls[0] = Multicall3.Call(address(weth), abi.encodeCall(weth.approve, (address(bento), UINT256_MAX)));
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](1);
+        calls[0] = IMulticall3.Call(address(weth), abi.encodeCall(weth.approve, (address(bento), UINT256_MAX)));
         multicall.aggregate(calls);
 
         //Pre Approve DAI & WETH on bentobox & preDeposit
@@ -56,7 +58,7 @@ contract VaultTest is Test {
     }
 
     ///@notice Function to easily deploy a dai to weth vault
-    function deployDaiToWethVault() public returns (Vault) {
+    function deployDaiToWethVault(bool waitEpochPeriod) public returns (Vault) {
         bytes memory params = abi.encodePacked(
             address(bento),
             address(this),
@@ -70,7 +72,7 @@ contract VaultTest is Test {
             10 ** weth.decimals()
         );
 
-        return factory.createDCA(params, true);
+        return factory.createDCA(params, waitEpochPeriod);
     }
 
     ///@notice Function to easily execute a dca
@@ -81,10 +83,10 @@ contract VaultTest is Test {
         uint256 ratio = (daiTokenPrice * 1e24) / wethTokenPrice;
         wethAmount = (ratio * amount * 995) / 1000 / 1e24;
 
-        Multicall3.Call[] memory calls = new Multicall3.Call[](1);
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](1);
         bytes memory jobCallData =
             abi.encodeCall(bento.deposit, (IERC20(address(weth)), address(multicall), address(dca), wethAmount, 0));
-        calls[0] = Multicall3.Call(address(bento), jobCallData);
+        calls[0] = IMulticall3.Call(address(bento), jobCallData);
 
         vm.prank(executor);
         dca.executeDCA(multicall, calls);
@@ -92,7 +94,7 @@ contract VaultTest is Test {
 
     function testDeployDAItoWETHVault() public {
         //exec
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
 
         //assert
         assertEq(dca.lastBuy(), block.timestamp);
@@ -116,9 +118,9 @@ contract VaultTest is Test {
         assertEq(_buyTokenDecimalsFactor, 10 ** weth.decimals());
     }
 
-    function testExecuteDca() public {
+    function testExecuteDca_waitEpochPeriod() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
 
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
@@ -132,12 +134,27 @@ contract VaultTest is Test {
         //assert
         assertEq(bento.balanceOf(IERC20(address(weth)), address(dca)), oldVaultBalance + wethAmount);
     }
+    
+    function testExecuteDca_noWaitEpochPeriod() public {
+        //setup
+        Vault dca = deployDaiToWethVault(false); //set lastBuy to 1 so no need to warp to execute
+        bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
+
+        //save balances
+        uint256 oldVaultBalance = bento.balanceOf(IERC20(address(weth)), address(dca));
+
+        //exec
+        uint256 wethAmount = executeDaiToWethDca(dca, SELL_AMOUNT, EXECUTOR);
+
+        //assert
+        assertEq(bento.balanceOf(IERC20(address(weth)), address(dca)), oldVaultBalance + wethAmount);
+    }
 
     function testExecuteDca_fail_tooClose() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
-        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
@@ -147,11 +164,11 @@ contract VaultTest is Test {
 
     function testExecuteDca_fail_oracleError() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
         daiOracle.setLatestAnswer(0); //set oracle to 0
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
-        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
@@ -161,10 +178,10 @@ contract VaultTest is Test {
 
     function testExecuteDca_fail_notEnoughTokenReturned() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
         vm.warp(block.timestamp + EPOCH_DURATION); //Add 10 min time so we can execute the dca
-        Multicall3.Call[] memory calls = new Multicall3.Call[](0);
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](0);
 
         //exec & assert
         vm.prank(EXECUTOR);
@@ -174,14 +191,14 @@ contract VaultTest is Test {
 
     function testWithdraw() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
 
         uint256 oldVaultBalance = bento.balanceOf(IERC20(address(dai)), address(dca));
         uint256 oldOwnerBalance = dai.balanceOf(address(this));
 
         //exec
-        dca.withdraw(IERC20(address(dai)), SELL_AMOUNT);
+        dca.withdraw(ERC20(address(dai)), SELL_AMOUNT);
 
         //assert
         assertEq(bento.balanceOf(IERC20(address(dai)), address(dca)), oldVaultBalance - SELL_AMOUNT);
@@ -190,18 +207,18 @@ contract VaultTest is Test {
 
     function testWithdraw_fail_ownerOnly() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         dai.transfer((address(dca)), SELL_AMOUNT);
 
         //exec & assert
         vm.prank(address(8888));
         vm.expectRevert(Vault.OwnerOnly.selector);
-        dca.withdraw(IERC20(address(dai)), SELL_AMOUNT);
+        dca.withdraw(ERC20(address(dai)), SELL_AMOUNT);
     }
 
     function testCancel() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
 
         uint256 oldVaultBalanceDai = bento.balanceOf(IERC20(address(dai)), address(dca));
@@ -221,7 +238,7 @@ contract VaultTest is Test {
 
     function testCancel_fail_ownerOnly() public {
         //setup
-        Vault dca = deployDaiToWethVault();
+        Vault dca = deployDaiToWethVault(true);
         bento.deposit(IERC20(address(dai)), address(this), address(dca), SELL_AMOUNT, 0);
 
         //exec & assert
